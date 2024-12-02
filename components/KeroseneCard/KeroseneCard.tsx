@@ -1,27 +1,11 @@
 import { useAccount } from "wagmi";
 import ButtonComponent from "@/components/reusable/ButtonComponent";
-import NoteCardsContainer from "../reusable/NoteCardsContainer";
 import { DialogClose } from "../ui/dialog";
 import { STAKE_CONTRACTS } from "@/constants/Stake";
-import { StakeCurenciesType, StakeCurrencies } from "@/models/Stake";
-import { useState } from "react";
-import {
-  useReadCurveM0DyadAllowance,
-  useReadCurveM0DyadBalanceOf,
-  useReadCurveUsdcdyad,
-  useReadCurveUsdcdyadAllowance,
-  useReadCurveUsdcdyadBalanceOf,
-  useReadDyadLpStakingCurveM0DyadNoteIdToAmountDeposited,
-  useReadDyadLpStakingCurveUsdcdyadNoteIdToAmountDeposited,
-  useWriteCurveM0DyadApprove,
-  useWriteCurveUsdcdyadApprove,
-  useWriteDyadLpStakingCurveM0DyadDeposit,
-  useWriteDyadLpStakingCurveM0DyadWithdraw,
-  useWriteDyadLpStakingCurveUsdcdyadDeposit,
-  useWriteDyadLpStakingCurveUsdcdyadWithdraw,
-} from "@/generated";
+import { StakeCurenciesType } from "@/models/Stake";
+import { useEffect, useState } from "react";
 import { BigIntInput } from "@/components/reusable/BigIntInput";
-import { ST } from "next/dist/shared/lib/utils";
+import useGetStakeContractData from "@/hooks/useGetStakeContractData";
 
 interface KeroseneProps {
   currency: string;
@@ -41,64 +25,80 @@ const KeroseneCard: React.FC<KeroseneProps> = ({
   const { address } = useAccount();
   const [stakeInputValue, setStakeInputValue] = useState("");
   const [unstakeInputValue, setUnstakeInputValue] = useState("");
+  const [isStakeContractDataLoading, setIsStakeContractDataLoading] =
+    useState(true);
 
-  const { writeContract: writeApprove } = useWriteCurveM0DyadApprove();
-  const { writeContract: writeApproveUSDCDyad } =
-    useWriteCurveUsdcdyadApprove();
+  const stakeContractKey = currency as StakeCurenciesType;
 
-  const { writeContract: writeStake } =
-    useWriteDyadLpStakingCurveM0DyadDeposit();
+  const StakeContractData = useGetStakeContractData(stakeContractKey);
 
-  const { writeContract: writeStakeUSDCDyad } =
-    useWriteDyadLpStakingCurveUsdcdyadDeposit();
+  const { data: allowance, isLoading: isAllowanceLoading } =
+    StakeContractData?.getAallowance({
+      args: [address!, stakingContract!],
+    });
 
-  const { data: allowance } = useReadCurveM0DyadAllowance({
-    args: [address!, stakingContract!],
-  });
+  const { writeContract: writeUnstake, isPending: isStakeUnstakeLoading } =
+    StakeContractData?.getWriteUnstake();
 
-  const { data: allowanceUSDCDyad } = useReadCurveUsdcdyadAllowance({
-    args: [address!, stakingContract!],
-  });
+  const { data: lpBalance, isLoading: isLpBalanceLoading } =
+    StakeContractData?.getLpBalance({
+      args: [address!],
+    });
 
-  const { writeContract: writeUnstake } =
-    useWriteDyadLpStakingCurveM0DyadWithdraw();
-
-  const { writeContract: writeUnstakeUSDCDyad } =
-    useWriteDyadLpStakingCurveUsdcdyadWithdraw();
-
-  const { data: lpBalance } = useReadCurveM0DyadBalanceOf({
-    args: [address!],
-  });
-
-  const { data: lpBalanceUSDCDYAD } = useReadCurveUsdcdyadBalanceOf({
-    args: [address!],
-  });
-
-  const { data: stakeBalance } =
-    useReadDyadLpStakingCurveM0DyadNoteIdToAmountDeposited({
+  const { data: stakeBalance, isLoading: isStakeBalanceLoading } =
+    StakeContractData?.getStakeBalance({
       args: [tokenId],
     });
 
-  const { data: stakeBalanceUSDCDyad } =
-    useReadDyadLpStakingCurveUsdcdyadNoteIdToAmountDeposited({
-      args: [tokenId],
-    });
+  const {
+    writeContract: getWriteLPApprove,
+    isLoading: isWriteLPApproveLoading,
+  } = StakeContractData?.getWriteLPApprove();
+
+  const { writeContract: getWriteLPStake, isLoading: isWriteLPStakeLoading } =
+    StakeContractData?.getWriteLPStake();
+
+  //Combine loading states from all sub-hooks into a single loading state
+  useEffect(() => {
+    if (
+      !isAllowanceLoading &&
+      !isStakeUnstakeLoading &&
+      !isLpBalanceLoading &&
+      !isStakeBalanceLoading &&
+      !isWriteLPApproveLoading &&
+      !isWriteLPStakeLoading
+    ) {
+      setIsStakeContractDataLoading(false);
+    } else {
+      if (
+        isAllowanceLoading ||
+        isStakeUnstakeLoading ||
+        isLpBalanceLoading ||
+        isStakeBalanceLoading ||
+        isWriteLPApproveLoading ||
+        isWriteLPStakeLoading
+      ) {
+        setIsStakeContractDataLoading(true);
+      }
+    }
+  }, [
+    isAllowanceLoading,
+    isStakeUnstakeLoading,
+    isLpBalanceLoading,
+    isStakeBalanceLoading,
+    isWriteLPApproveLoading,
+    isWriteLPStakeLoading,
+  ]);
 
   const needsApproval = BigInt(stakeInputValue || "0") > (allowance || 0n);
-  const needsApprovalUSDCDyad =
-    BigInt(stakeInputValue || "0") > (allowanceUSDCDyad || 0n);
 
   const canUnstake =
     stakeBalance && BigInt(unstakeInputValue || "0") <= stakeBalance;
 
-  const canUnstakeUSDCDyad =
-    stakeBalanceUSDCDyad &&
-    BigInt(unstakeInputValue || "0") <= stakeBalanceUSDCDyad;
-
   return (
     <div className="text-sm font-semibold text-[#A1A1AA]">
       <div className="text-2xl text-[#FAFAFA] flex justify-between mt-[15px] w-full">
-        <div>{STAKE_CONTRACTS[currency as StakeCurenciesType].label}</div>
+        <div>{StakeContractData?.label}</div>
       </div>
       <div className="mt-4 w-full md:w-[600px]">
         <div className="flex flex-col md:flex-row justify-between gap-3 md:gap-6 mt-[32px]">
@@ -106,14 +106,8 @@ const KeroseneCard: React.FC<KeroseneProps> = ({
             className="ml-auto cursor-pointer md:hidden"
             onClick={() =>
               actionType === "stake"
-                ? STAKE_CONTRACTS[currency as StakeCurenciesType].stakeKey ===
-                  StakeCurrencies.CURVE_M0_DYAD_LP
-                  ? setStakeInputValue(`${lpBalance?.toString()}`)
-                  : setStakeInputValue(`${lpBalanceUSDCDYAD?.toString()}`)
-                : STAKE_CONTRACTS[currency as StakeCurenciesType].stakeKey ===
-                    StakeCurrencies.CURVE_M0_DYAD_LP
-                  ? setUnstakeInputValue(`${stakeBalance?.toString()}`)
-                  : setUnstakeInputValue(`${stakeBalanceUSDCDyad?.toString()}`)
+                ? setStakeInputValue(`${lpBalance?.toString()}`)
+                : setUnstakeInputValue(`${stakeBalance?.toString()}`)
             }
           >
             Max
@@ -121,7 +115,7 @@ const KeroseneCard: React.FC<KeroseneProps> = ({
           {actionType === "stake" ? (
             <div className="flex justify-between w-full">
               <BigIntInput
-                placeholder={`Amount of ${STAKE_CONTRACTS[currency].name} to stake`}
+                placeholder={`Amount of ${StakeContractData?.name} to stake`}
                 onChange={setStakeInputValue}
                 value={stakeInputValue}
                 decimals={18}
@@ -131,7 +125,7 @@ const KeroseneCard: React.FC<KeroseneProps> = ({
           ) : (
             <div className="flex justify-between items-center w-full">
               <BigIntInput
-                placeholder={`Amount of ${STAKE_CONTRACTS[currency].name} to unstake`}
+                placeholder={`Amount of ${StakeContractData?.name} to unstake`}
                 onChange={setUnstakeInputValue}
                 value={unstakeInputValue}
                 type="number"
@@ -144,16 +138,8 @@ const KeroseneCard: React.FC<KeroseneProps> = ({
               width={"100px"}
               onClick={() =>
                 actionType === "stake"
-                  ? STAKE_CONTRACTS[currency as StakeCurenciesType].stakeKey ===
-                    StakeCurrencies.CURVE_M0_DYAD_LP
-                    ? setStakeInputValue(`${lpBalance?.toString()}`)
-                    : setStakeInputValue(`${lpBalanceUSDCDYAD?.toString()}`)
-                  : STAKE_CONTRACTS[currency as StakeCurenciesType].stakeKey ===
-                      StakeCurrencies.CURVE_M0_DYAD_LP
-                    ? setUnstakeInputValue(`${stakeBalance?.toString()}`)
-                    : setUnstakeInputValue(
-                        `${stakeBalanceUSDCDyad?.toString()}`
-                      )
+                  ? setStakeInputValue(`${lpBalance?.toString()}`)
+                  : setUnstakeInputValue(`${stakeBalance?.toString()}`)
               }
             >
               Max
@@ -168,78 +154,34 @@ const KeroseneCard: React.FC<KeroseneProps> = ({
           {actionType === "stake" ? (
             <ButtonComponent
               disabled={!stakeInputValue || BigInt(stakeInputValue) === 0n}
-              onClick={() => {
-                const isCurveM0Dyad =
-                  STAKE_CONTRACTS[currency as StakeCurenciesType].stakeKey ===
-                  StakeCurrencies.CURVE_M0_DYAD_LP;
-
-                if (isCurveM0Dyad) {
-                  if (needsApproval) {
-                    // Approve Curve M0 Dyad
-                    writeApprove({
+              onClick={() =>
+                needsApproval
+                  ? getWriteLPApprove({
                       args: [stakingContract!, stakeInputValue],
-                    });
-                  } else {
-                    // Stake Curve M0 Dyad
-                    writeStake({
+                    })
+                  : getWriteLPStake({
                       args: [tokenId, stakeInputValue],
                       onSuccess: () => {
                         onSuccess?.();
                       },
-                    });
-                  }
-                } else {
-                  if (needsApprovalUSDCDyad) {
-                    // Approve USDC-Dyad
-                    writeApproveUSDCDyad({
-                      args: [stakingContract!, stakeInputValue],
-                    });
-                  } else {
-                    // Stake USDC-Dyad
-                    writeStakeUSDCDyad({
-                      args: [tokenId, stakeInputValue],
-                      onSuccess: () => {
-                        onSuccess?.();
-                      },
-                    });
-                  }
-                }
-              }}
+                    })
+              }
             >
-              {STAKE_CONTRACTS[currency as StakeCurenciesType].stakeKey ===
-              StakeCurrencies.CURVE_M0_DYAD_LP
-                ? needsApproval
-                  ? "Approve"
-                  : "Stake"
-                : needsApprovalUSDCDyad
-                  ? "Approve"
-                  : "Stake"}
+              {needsApproval ? "Approve" : "Stake"}
             </ButtonComponent>
           ) : (
             <ButtonComponent
               disabled={
                 !unstakeInputValue ||
-                unstakeInputValue.length <= 0 ||
-                STAKE_CONTRACTS[currency as StakeCurenciesType].stakeKey ===
-                  StakeCurrencies.CURVE_M0_DYAD_LP
-                  ? !canUnstake
-                  : !canUnstakeUSDCDyad
+                (unstakeInputValue.length <= 0 && !canUnstake)
               }
               onClick={() =>
-                STAKE_CONTRACTS[currency as StakeCurenciesType].stakeKey ===
-                StakeCurrencies.CURVE_M0_DYAD_LP
-                  ? writeUnstake({
-                      args: [tokenId, unstakeInputValue],
-                      onSuccess: () => {
-                        onSuccess?.();
-                      },
-                    })
-                  : writeUnstakeUSDCDyad({
-                      args: [tokenId, unstakeInputValue],
-                      onSuccess: () => {
-                        onSuccess?.();
-                      },
-                    })
+                writeUnstake({
+                  args: [tokenId, unstakeInputValue],
+                  onSuccess: () => {
+                    onSuccess?.();
+                  },
+                })
               }
             >
               Unstake

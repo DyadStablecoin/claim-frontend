@@ -18,6 +18,12 @@ export type StakeContractsType = {
     iconLeft?: string | StaticImport;
     iconRight?: string | StaticImport;
     link?: string;
+    getWriteLPApprove?: any;
+    getWriteLPStake?: any;
+    getAallowance?: any;
+    getWriteUnstake?: any;
+    getLpBalance?: any;
+    getStakeBalance?: any;
   };
 };
 
